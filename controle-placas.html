@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Controle de Placas</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+:root{--bg:#f4f6fb;--card:#fff;--tx:#161b2e;--mut:#6b7390;--pri:#1a5cff;--bd:#e0e4ef;--ok:#12a150;--warn:#d98a00;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e1220;--card:#181e33;--tx:#eef1fb;--mut:#98a0bd;--bd:#2a3150;--pri:#5b8cff}}
+:root[data-theme="dark"]{--bg:#0e1220;--card:#181e33;--tx:#eef1fb;--mut:#98a0bd;--bd:#2a3150;--pri:#5b8cff}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:12px 12px 80px;max-width:640px;margin:0 auto}
+h1{font-size:19px;margin:8px 0 12px}h2{font-size:16px;margin:0 0 8px}
+nav{display:flex;gap:6px;margin-bottom:12px;position:sticky;top:env(safe-area-inset-top,0px);background:var(--bg);padding:6px 0;z-index:5}
+nav button{flex:1;padding:10px 4px;border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:10px;font-size:13px;font-weight:600}
+nav button.on{background:var(--pri);color:#fff;border-color:var(--pri)}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:12px;margin-bottom:10px}
+input,select,textarea{width:100%;padding:10px;margin:4px 0 8px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);color:var(--tx);font:inherit}
+label{font-size:12px;color:var(--mut)}
+.btn{padding:10px 14px;border:0;border-radius:10px;background:var(--pri);color:#fff;font-weight:600;font-size:14px}
+.btn.s{background:var(--bg);color:var(--tx);border:1px solid var(--bd)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.sp{justify-content:space-between}
+.tag{font-size:11px;padding:2px 8px;border-radius:99px;border:1px solid var(--bd);color:var(--mut)}
+.ok{color:var(--ok);border-color:var(--ok)}.wr{color:var(--warn);border-color:var(--warn)}
+.mut{color:var(--mut);font-size:13px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.big{font-size:22px;font-weight:700}
+.out{word-break:break-all;background:var(--bg);border:1px dashed var(--bd);border-radius:10px;padding:10px;margin:8px 0;font-size:13px}
+.qr{background:#fff;padding:10px;border-radius:10px;display:inline-block;margin-top:8px}.qr svg{width:180px;height:180px;display:block}
+.x{background:none;border:0;color:#d33;font-size:13px}
+</style>
+</head>
+<body>
+<h1>📋 Controle de Placas</h1>
+<nav id="nav"></nav>
+<div id="app"></div>
+<script>
+var KEY="controle_placas_v1";
+var D={placas:[],vendas:[],qr:"",maps:"",pid:""};
+try{var s=localStorage.getItem(KEY);if(s)D=Object.assign(D,JSON.parse(s))}catch(e){}
+var ST=["Fazer a placa","Placa branca pronta (falta imprimir e colar)","Impressa (falta colar)","Pronta","Vendida","Enviada","Instalada"];
+D.placas.forEach(function(p){if(p.st==="Em estoque")p.st="Pronta"});
+var REF=null;
+function toast(t){var e=document.createElement("div");e.textContent=t;e.style.cssText="position:fixed;left:12px;right:12px;bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--tx);color:var(--bg);padding:12px;border-radius:10px;z-index:9;text-align:center";document.body.appendChild(e);setTimeout(function(){e.remove()},3500)}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(D))}catch(e){}
+ if(REF){try{REF.set({json:JSON.stringify(D)}).catch(function(){})}catch(e){}}}
+function init(){try{Promise.all([claude.use("db"),claude.use("user")]).then(function(r){var db=r[0],u=r[1];if(!db||!u)return;
+ return u.id().then(function(id){REF=db.doc("data/users/"+id+"/main");return REF.get()}).then(function(s){
+  var loc=D.placas.length+D.vendas.length,o=null;
+  if(s.exists&&s.data().json){try{o=JSON.parse(s.data().json)}catch(e){}}
+  if(o&&(o.placas||[]).length+(o.vendas||[]).length>=loc){D=Object.assign(D,o);try{localStorage.setItem(KEY,JSON.stringify(D))}catch(e){}render()}
+  else if(loc||D.qr||D.maps){save()}})}).catch(function(){})}catch(e){}}
+var tab="placas";
+var TABS=[["placas","Placas"],["vendas","Vendas"],["rev","Avaliação"]];
+function $(h){var d=document.createElement("div");d.innerHTML=h;return d}
+function esc(t){return String(t==null?"":t).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,5)}
+function brl(n){return (Number(n)||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}
+function copy(t,b){var f=function(){b.textContent="Copiado ✓";setTimeout(function(){b.textContent="Copiar"},1500)};
+ var fb=function(){var ta=document.createElement("textarea");ta.value=t;ta.style.cssText="position:fixed;opacity:0";document.body.appendChild(ta);ta.select();var ok=false;try{ok=document.execCommand("copy")}catch(e){}document.body.removeChild(ta);ok?f():toast("Não consegui copiar. Segure o texto do link para copiar.")};
+ try{navigator.clipboard.writeText(t).then(f,fb)}catch(e){fb()}}
+function v(id){return document.getElementById(id).value.trim()}
+
+function nav(){var n=document.getElementById("nav");n.innerHTML="";
+ TABS.forEach(function(t){var b=document.createElement("button");b.textContent=t[1];b.className=tab===t[0]?"on":"";b.onclick=function(){tab=t[0];render()};n.appendChild(b)})}
+
+function render(){nav();var a=document.getElementById("app");a.innerHTML="";
+ ({placas:pPlacas,vendas:pVendas,rev:pRev})[tab](a)}
+
+function pPlacas(a){
+ var prod=D.placas.filter(function(p){return ST.indexOf(p.st)<3}).length;
+ var pronta=D.placas.filter(function(p){return p.st==="Pronta"}).length;
+ var inst=D.placas.filter(function(p){return p.st==="Instalada"}).length;
+ a.appendChild($('<div class="grid" style="grid-template-columns:1fr 1fr 1fr"><div class="card"><div class="mut">A produzir</div><div class="big">'+prod+'</div></div><div class="card"><div class="mut">Prontas</div><div class="big">'+pronta+'</div></div><div class="card"><div class="mut">Instaladas</div><div class="big">'+inst+'</div></div></div>'));
+ var f=$('<div class="card"><h2>Nova placa</h2><label>Cliente / estabelecimento</label><input id="pc" placeholder="Ex.: Barbearia do João"><label>Modelo</label><select id="pm"><option>NFC + QR Code</option><option>Só QR Code</option><option>Só NFC</option></select><label>Status</label><select id="ps"><option>Fazer a placa</option><option selected>Placa branca pronta (falta imprimir e colar)</option><option>Impressa (falta colar)</option><option>Pronta</option><option>Vendida</option><option>Enviada</option><option>Instalada</option></select><label>Link de avaliação gravado (opcional)</label><input id="pl" placeholder="https://..."><button class="btn" id="pa">Adicionar placa</button></div>');
+ a.appendChild(f);
+ f.querySelector("#pa").onclick=function(){var c=v("pc");if(!c){toast("Informe o cliente.");return}
+  D.placas.unshift({id:uid(),c:c,m:v("pm"),st:v("ps"),l:v("pl")});save();render()};
+ D.placas.forEach(function(p){
+  var d=$('<div class="card"><div class="row sp"><b>'+esc(p.c)+'</b><span class="tag '+(p.st==="Instalada"||p.st==="Pronta"?"ok":"wr")+'">'+esc(p.st)+'</span></div><div class="mut">'+esc(p.m)+'</div>'+(p.l?'<div class="out">'+esc(p.l)+'</div>':'')+'<div class="row"><select style="width:100%;margin:0"></select><button class="x">Excluir</button></div></div>');
+  var sel=d.querySelector("select");ST.forEach(function(o){var op=document.createElement("option");op.textContent=o;if(o===p.st)op.selected=true;sel.appendChild(op)});
+  sel.onchange=function(){p.st=sel.value;save();render()};
+  d.querySelector(".x").onclick=function(){if(this.dataset.s!=="1"){this.dataset.s="1";this.textContent="Toque de novo para confirmar";return}D.placas=D.placas.filter(function(x){return x.id!==p.id});save();render()};
+  a.appendChild(d)});
+ if(!D.placas.length)a.appendChild($('<p class="mut">Nenhuma placa cadastrada ainda.</p>'))}
+
+function pVendas(a){
+ var pago=0,pend=0;D.vendas.forEach(function(x){var t=x.q*x.p;x.st==="Pago"?pago+=t:pend+=t});
+ a.appendChild($('<div class="grid"><div class="card"><div class="mut">Recebido</div><div class="big">'+brl(pago)+'</div></div><div class="card"><div class="mut">A receber</div><div class="big">'+brl(pend)+'</div></div></div>'));
+ var f=$('<div class="card"><h2>Nova venda</h2><label>Cliente</label><input id="vc"><div class="grid"><div><label>Quantidade</label><input id="vq" type="number" min="1" value="1" inputmode="numeric"></div><div><label>Valor unitário (R$)</label><input id="vp" type="number" step="0.01" inputmode="decimal"></div></div><label>Pagamento</label><select id="vs"><option>Pago</option><option>Pendente</option></select><label>Data</label><input id="vd" type="date"><button class="btn" id="va">Registrar venda</button></div>');
+ a.appendChild(f);f.querySelector("#vd").value=new Date().toISOString().slice(0,10);
+ f.querySelector("#va").onclick=function(){var c=v("vc");if(!c){toast("Informe o cliente.");return}
+  D.vendas.unshift({id:uid(),c:c,q:Number(v("vq"))||1,p:Number(v("vp"))||0,st:v("vs"),d:v("vd")});save();render()};
+ D.vendas.forEach(function(x){
+  var d=$('<div class="card"><div class="row sp"><b>'+esc(x.c)+'</b><b>'+brl(x.q*x.p)+'</b></div><div class="mut">'+x.q+' × '+brl(x.p)+' · '+esc(x.d.split("-").reverse().join("/"))+'</div><div class="row sp"><button class="btn s" style="padding:6px 10px">'+esc(x.st)+' (trocar)</button><button class="x">Excluir</button></div></div>');
+  d.querySelector(".btn").onclick=function(){x.st=x.st==="Pago"?"Pendente":"Pago";save();render()};
+  d.querySelector(".x").onclick=function(){if(this.dataset.s!=="1"){this.dataset.s="1";this.textContent="Toque de novo para confirmar";return}D.vendas=D.vendas.filter(function(y){return y.id!==x.id});save();render()};
+  a.appendChild(d)});
+ if(!D.vendas.length)a.appendChild($('<p class="mut">Nenhuma venda registrada ainda.</p>'))}
+
+function qrSvg(t){try{var q=qrcode(0,"M");q.addData(t);q.make();return q.createSvgTag({cellSize:4,margin:0,scalable:true})}catch(e){return"<p>Não foi possível gerar o QR.</p>"}}
+
+function pQR(a){
+ var d=$('<div class="card"><h2>Link do QR Code alternativo</h2><p class="mut">Guarde aqui o link atual e gere o QR Code. Importante: um QR Code impresso na placa não muda sozinho. Para trocar o destino sem reimprimir, imprima um QR de <b>link curto redirecionável</b> (serviço grátis de QR dinâmico) e altere o destino lá; depois cole aqui o link para ficar registrado.</p><label>Link de destino</label><input id="ql" placeholder="https://..." value="'+esc(D.qr)+'"><div class="row"><button class="btn" id="qs">Salvar e gerar QR</button><button class="btn s" id="qc">Copiar</button></div><div id="qo"></div></div>');
+ a.appendChild(d);
+ function show(){var o=d.querySelector("#qo");o.innerHTML=D.qr?'<div class="out">'+esc(D.qr)+'</div><div class="qr">'+qrSvg(D.qr)+'</div>':""}
+ d.querySelector("#qs").onclick=function(){D.qr=v("ql");save();show()};
+ d.querySelector("#qc").onclick=function(){if(D.qr)copy(D.qr,this)};show()}
+
+function extractPid(u){var m=u.match(/place_id[=:]([A-Za-z0-9_-]{20,})/)||u.match(/(ChIJ[A-Za-z0-9_-]{15,})/);return m?m[1]:""}
+
+function pRev(a){
+ var d=$('<div class="card"><h2>Link direto das 5 estrelas</h2><p class="mut">Cole o link do Google Maps da empresa. Se ele tiver o Place ID, o link de avaliação sai na hora. Links curtos (maps.app.goo.gl) não dá para ler aqui: abra o link, copie o endereço completo da barra do navegador e cole.</p><label>Link do Google Maps</label><input id="ml" placeholder="https://www.google.com/maps/..." value="'+esc(D.maps)+'"><button class="btn" id="mg">Gerar link</button><p class="mut" style="margin-top:10px">Se não aparecer, cole o <b>Place ID</b> da empresa (comece com ChIJ). Ache-o no <a href="https://developers.google.com/maps/documentation/places/web-service/place-id" target="_blank" rel="noopener" style="color:var(--pri)">buscador de Place ID do Google</a> ou use o link de avaliação do Perfil da Empresa (g.page/r/.../review).</p><label>Place ID (opcional)</label><input id="mp" placeholder="ChIJ..." value="'+esc(D.pid)+'"><div id="mo"></div></div>');
+ a.appendChild(d);
+ function show(r){var o=d.querySelector("#mo");
+  if(!r){o.innerHTML="";return}
+  o.innerHTML='<div class="out">'+esc(r)+'</div><div class="row"><button class="btn" id="cc">Copiar</button><a class="btn s" style="text-decoration:none" href="'+esc(r)+'" target="_blank" rel="noopener">Testar</a></div>';
+  o.querySelector("#cc").onclick=function(){copy(r,this)}}
+ d.querySelector("#mg").onclick=function(){
+  var u=v("ml"),p=v("mp");D.maps=u;
+  var r="";
+  if(/g\.page\/r\//.test(u)){r=u.replace(/\/review.*$/,"").replace(/\/$/,"")+"/review"}
+  else{var id=p||extractPid(u);if(id){D.pid=id;r="https://search.google.com/local/writereview?placeid="+encodeURIComponent(id)}}
+  save();
+  if(!r){var sh=/maps\.app\.goo\.gl|goo\.gl\/maps/.test(u);d.querySelector("#mo").innerHTML='<div class="out">'+(sh?'Esse é um link curto. Abra-o no navegador, copie o endereço completo da barra e cole aqui.':'Esse link do Maps não traz o Place ID (código do local). Abra o buscador abaixo, procure a empresa, copie o ID que começa com ChIJ, cole no campo Place ID e toque em Gerar link.')+'</div><a class="btn s" style="text-decoration:none;display:inline-block" href="https://developers.google.com/maps/documentation/places/web-service/place-id" target="_blank" rel="noopener">Abrir buscador de Place ID</a>';return}
+  show(r)};
+ var r0=D.pid?"https://search.google.com/local/writereview?placeid="+encodeURIComponent(D.pid):"";show(r0)}
+
+render();init();
+</script>
+</body>
+</html>
